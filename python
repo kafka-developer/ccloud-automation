@@ -1,0 +1,86 @@
+import os
+import requests
+from dotenv import load_dotenv
+from requests.auth import HTTPBasicAuth
+
+# Load environment variables
+load_dotenv()
+
+# IAM (Cloud) API credentials
+CCLOUD_API_KEY = os.getenv("CCLOUD_API_KEY")
+CCLOUD_API_SECRET = os.getenv("CCLOUD_API_SECRET")
+KAFKA_CLUSTER_ID = os.getenv("KAFKA_CLUSTER_ID")
+ENV_ID = os.getenv("ENV_ID")
+ROLE = os.getenv("ROLE")
+
+# Topic names and suffixes
+TOPIC_NAMES = os.getenv("TOPIC_NAMES", "").split(",")
+TOPIC_SUFFIXES = os.getenv("TOPIC_SUFFIXES", "").split(",")
+
+# Confluent Cloud IAM base URL
+BASE_URL = "https://api.confluent.cloud"
+auth = HTTPBasicAuth(CCLOUD_API_KEY, CCLOUD_API_SECRET)
+headers = {"Content-Type": "application/json"}
+
+# Step 1: Create service account
+def create_service_account(name, desc):
+    url = f"{BASE_URL}/iam/v2/service-accounts"
+    payload = {"display_name": name, "description": desc}
+    response = requests.post(url, auth=auth, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()["id"]
+
+# Step 2: Create API key for service account
+def create_api_key(sa_id):
+    url = f"{BASE_URL}/iam/v2/api-keys"
+    payload = {
+        "spec": {
+            "display_name": "rbac-topic-api-key",
+            "description": "API key for topic access",
+            "owner": {"id": sa_id, "kind": "ServiceAccount"},
+            "resource": {
+                "id": KAFKA_CLUSTER_ID,
+                "kind": "KafkaCluster",
+                "environment": {"id": ENV_ID}
+            }
+        }
+    }
+    response = requests.post(url, auth=auth, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()["spec"]
+    return data["api_key"], data["api_secret"]
+
+# Step 3: Assign RBAC role for a topic
+def assign_role(sa_id, topic, role):
+    crn = f"crn://confluent.cloud/kafka={KAFKA_CLUSTER_ID}/topic={topic}"
+    url = f"{BASE_URL}/iam/v2/role-bindings"
+    payload = {
+        "principal": f"User:{sa_id}",
+        "role_name": role,
+        "crn_pattern": crn
+    }
+    response = requests.post(url, auth=auth, headers=headers, json=payload)
+    if response.status_code == 409:
+        print(f"[ℹ] Role {role} already assigned for topic: {topic}")
+    elif response.ok:
+        print(f"[✔] {role} assigned to topic: {topic}")
+    else:
+        print(f"[✖] Failed for topic {topic}: {response.status_code} {response.text}")
+
+# === MAIN EXECUTION ===
+if __name__ == "__main__":
+    try:
+        print(f"🔐 Using role: {ROLE}")
+        sa_id = create_service_account("rbac-topic-sa", "RBAC for topic access via automation")
+        api_key, api_secret = create_api_key(sa_id)
+        print(f"[✔] Service Account ID: {sa_id}")
+        print(f"[✔] API Key: {api_key}")
+        print(f"[✔] API Secret: {api_secret}")
+
+        for topic in TOPIC_NAMES:
+            for suffix in TOPIC_SUFFIXES:
+                full_topic = f"{topic}-{suffix}"
+                assign_role(sa_id, full_topic, ROLE)
+
+    except Exception as e:
+        print(f"[‼] RBAC setup failed: {str(e)}")
