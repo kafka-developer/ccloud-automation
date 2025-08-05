@@ -13,7 +13,7 @@ In a real-world enterprise setting, separating producer and consumer access ensu
 - **Consumer-only access** to read messages from specified consumer groups
 - **Least-privilege principle** by binding minimal roles
 
-This lab simulates that by:
+We accomplish that by:
 
 1. Creating two service accounts (one producer, one consumer)
 2. Assigning them appropriate roles
@@ -49,7 +49,7 @@ confluent kafka topic create psdev-rbac_validation_topic   --environment env-xy7
 
 ## Step 2: Create Service Accounts
 
->  Goal: Simulate separate identities with different roles
+>  Goal: To have separate identities with different roles
 
 ```bash
 # Producer
