@@ -97,18 +97,64 @@ confluent iam rbac role-binding create   --principal User:<CONSUMER_SA_ID>   --r
 
 ---
 
-## Step 5: Validate Access
+## Step 5: Validate RBAC – Produce & Consume Messages
 
-### Producer Test (Python or REST)
-Use the **producer API key** to send messages to `psdev-rbac_validation_topic`.
+###  Goal:
+Verify that only authorized service accounts can produce or consume data from the topic.
 
-Expected: Success
+---
 
-### Consumer Test (Python or REST)
-Use the **consumer API key** to consume from `psdev-rbac_validation_topic` with group `rbac-validation-group`.
+### Option A: Confluent Cloud UI
 
-Expected:  Success
+1. **Produce Message:**
+   - Go to **Topics** → Click `psdev-rbac_validation_topic` → **Messages** tab
+   - Click **Produce a message**
+   - Paste:
+     ```json
+     {
+       "message": "RBAC validation test"
+     }
+     ```
+   - Click **Produce message**
 
+2. **Consume Message:**
+   - On the same screen, scroll to **Consume from beginning**
+   - Consumer group: `rbac-validation-group`
+   - Use API key for the `psdev-consumer-svc`
+   - Click **Start consuming**
+
+---
+
+### Option B: Confluent CLI
+
+Make sure you're authenticated:
+
+```bash
+confluent login
+confluent environment use env-xy7xpg
+confluent kafka cluster use lkc-2nx3n2
+```
+
+**1. Produce Message:**
+
+```bash
+echo '{"message":"RBAC validation test"}' | confluent kafka topic produce psdev-rbac_validation_topic   --value-format json   --api-key <PRODUCER_API_KEY>   --api-secret <PRODUCER_API_SECRET>
+```
+
+**2. Consume Message:**
+
+```bash
+confluent kafka topic consume psdev-rbac_validation_topic   --group rbac-validation-group   --from-beginning   --value-format json   --api-key <CONSUMER_API_KEY>   --api-secret <CONSUMER_API_SECRET>
+```
+
+If everything is correctly configured, the consumer should print:
+```bash
+{"message":"RBAC validation test"}
+```
+
+Otherwise, you’ll get `GROUP_AUTHORIZATION_FAILED`.
+
+---
 ###  Negative Test
 Try using the **consumer service account** to produce — it should fail.
 
@@ -121,7 +167,6 @@ Expected: Access Denied
 - You can enforce Kafka RBAC using service accounts
 - Producer and consumer roles are **cleanly separated**
 - You can **validate access** via real message operations
-- Great for demos, audits, and compliance reviews
 
 ---
 
