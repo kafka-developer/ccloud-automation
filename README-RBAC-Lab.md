@@ -31,8 +31,8 @@ This lab simulates that by:
 
 ```bash
 # Example names
-sa-xxxxxxx (producer)
-sa-yyyyyyy (consumer)
+sa-7ypzkko (producer)
+sa-6kozzpq (consumer)
 ```
 
 ---
@@ -42,7 +42,7 @@ sa-yyyyyyy (consumer)
 >  Goal: Ensure there's a test topic to operate on
 
 ```bash
-confluent kafka topic create psdev-rbac_validation_topic   --environment <ENV_ID>   --cluster <KAFKA_CLUSTER_ID>
+confluent kafka topic create psdev-rbac_validation_topic   --environment env-xy7xpg   --cluster lkc-2nx3n2
 ```
 
 ---
@@ -53,7 +53,7 @@ confluent kafka topic create psdev-rbac_validation_topic   --environment <ENV_ID
 
 ```bash
 # Producer
-confluent iam service-account create psdev-svc-producer --description "Producer SA"
+confluent iam service-account create psdev-svc  --description "Producer SA"
 
 # Consumer
 confluent iam service-account create psdev-svc-consumer --description "Consumer SA"
@@ -69,10 +69,10 @@ Note the generated service account IDs.
 
 ```bash
 # For producer
-confluent api-key create   --resource <KAFKA_CLUSTER_ID>   --service-account <PRODUCER_SA_ID>   --description "Producer key"
+confluent api-key create   --resource lkc-2nx3n2   --service-account sa-7ypzkko   --description "Producer key"
 
 # For consumer
-confluent api-key create   --resource <KAFKA_CLUSTER_ID>   --service-account <CONSUMER_SA_ID>   --description "Consumer key"
+confluent api-key create   --resource lkc-2nx3n2   --service-account sa-6kozzpq   --description "Consumer key"
 ```
 
 Store both API key/secret pairs.
@@ -85,14 +85,14 @@ Store both API key/secret pairs.
 
 ### Producer: Write Access
 ```bash
-confluent iam rbac role-binding create   --principal User:<PRODUCER_SA_ID>   --role DeveloperWrite   --resource Topic:psdev-rbac_validation_topic   --environment <ENV_ID>
+confluent iam rbac role-binding create   --principal User:lkc-2nx3n2   --role DeveloperWrite   --resource Topic:psdev-rbac_validation_topic   --environment env-xy7xpg
 ```
 
 ### Consumer: Read Access for Consumer Group
 ```bash
-confluent iam rbac role-binding create   --principal User:<CONSUMER_SA_ID>   --role DeveloperRead   --resource Topic:psdev-rbac_validation_topic   --environment <ENV_ID>
+confluent iam rbac role-binding create   --principal User:sa-6kozzpq   --role DeveloperRead   --resource Topic:psdev-rbac_validation_topic   --environment env-xy7xpg
 
-confluent iam rbac role-binding create   --principal User:<CONSUMER_SA_ID>   --role DeveloperRead   --resource Group:rbac-validation-group   --environment <ENV_ID>
+confluent iam rbac role-binding create   --principal User:sa-6kozzpq   --role DeveloperRead   --resource Group:rbac-validation-group   --environment env-xy7xpg
 ```
 
 ---
@@ -108,7 +108,7 @@ Verify that only authorized service accounts can produce or consume data from th
 
 1. **Produce Message:**
    - Go to **Topics** → Click `psdev-rbac_validation_topic` → **Messages** tab
-   - Click **Produce a message**
+   - Click **Produce a message** from the **Actions** dropdown menu.
    - Paste:
      ```json
      {
@@ -174,6 +174,6 @@ Expected: Access Denied
 
 ```bash
 confluent kafka topic delete psdev-rbac_validation_topic --cluster <KAFKA_CLUSTER_ID>
-confluent iam service-account delete <PRODUCER_SA_ID>
-confluent iam service-account delete <CONSUMER_SA_ID>
+confluent iam service-account delete sa-7ypzkko
+confluent iam service-account delete sa-6kozzpq
 ```
