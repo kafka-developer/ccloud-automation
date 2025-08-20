@@ -12,7 +12,7 @@
 
 ---
 
-## 1) Read the versions
+## 1) Check the versions
 
 **Confluent Platform (CP) — from a broker image tag**
 
