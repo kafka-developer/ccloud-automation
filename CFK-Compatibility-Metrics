@@ -1,130 +1,118 @@
+# CFK 2.10.2 – Environment Compatibility Brief (no-pvs cluster, **KRaft-only**, namespace: `cdm-kafka`)
 
-# CFK ↔ Confluent Platform ↔ Component Compatibility Matrix
-_Last updated: August 20, 2025_
+*Last updated: 2025-08-20*
 
-This document maps **Confluent for Kubernetes (CFK)** versions to the **Confluent Platform (CP)** versions and core components (Kafka broker/KRaft, Schema Registry, etc.). It also includes quick commands to discover versions from a running cluster, and authoritative sources.
-
----
-
-## 1) Top‑level matrix (what CFK can manage)
-
-> **Key idea:** Starting with **CFK 2.9**, CFK supports **all CP versions that are currently supported by Confluent**. **CFK 3.0** explicitly supports **CP 7.2.x → 8.0.x** and Kubernetes **1.25–1.33**.
-
-| CFK version | CP versions supported | Kubernetes versions | Notes |
-|---|---|---|---|
-| **3.0.x** | **7.2.x – 8.0.x** | **1.25 – 1.33** | CP **8.0** is **KRaft‑only** (ZooKeeper removed). Use CFK 3.0 for CP 8.0 deployments. |
-| **2.9.x** | Any **supported** 7.x CP release (and newer, as long as still supported by Confluent) | (per CFK 2.9 support policy) | CFK 2.9 “tracks” supported CP versions; for **CP 8.0**, plan KRaft migration and consider CFK 3.0 for the smoother path. |
-
-**Sources:** CFK 3.0 release notes; CFK upgrade/compatibility policy. [S1](#s1) • [S2](#s2)
+Environment-specific note based on your screenshot. This version assumes **KRaft-only** and uses the Kubernetes namespace **`cdm-kafka`** in all commands.
 
 ---
 
-## 2) CP → Kafka (broker) version mapping (for planning)
+## 1) Environment snapshot
 
-| Confluent Platform | Apache Kafka core |
-|---|---|
-| **8.0.x** | **4.0.x** |
-| **7.8.x** | **3.8.x** |
-| **7.7.x** | **3.7.x** |
-| **7.6.x** | **3.6.x** |
+| Item                           | Value                                          |
+| ------------------------------ | ---------------------------------------------- |
+| Cluster label                  | `no-pvs`                                       |
+| **Namespace**                  | **`cdm-kafka`**                                |
+| **CFK version**                | **2.10.2**                                     |
+| Operator image                 | `confluentinc/confluent-operator:0.1145.50`    |
+| Init container                 | `confluentinc/confluent-init-container:2.10.2` |
+| CP component images            | `7.8.3` (Confluent Platform **7.8.x**)         |
+| Kafka core (implied by CP 7.8) | **3.8.x**                                      |
+| Metadata mode                  | **KRaft**                                      |
 
-**Sources:** CP release notes and blogs. [S3](#s3) • [S4](#s4) • [S5](#s5) • [S6](#s6)
-
----
-
-## 3) KRaft vs ZooKeeper (critical policy)
-
-- **CP 8.0 and later:** **ZooKeeper is removed**. Kafka uses **KRaft only** for metadata.  
-- **Last CP with ZooKeeper packages:** **7.9.x** (end of packaging; support lifecycle continues per your subscription).  
-- **Upgrade path:** If you are on ZooKeeper (≤7.9), **migrate to KRaft first**, then upgrade to CP 8.0.
-
-**Sources:** CP 8.0 notes & migration guides; Confluent support advisory. [S7](#s7) • [S8](#s8) • [S9](#S9)
+**Implication:** Platform components should align on **CP 7.8.x** (brokers, Schema Registry, Connect, ksqlDB).
 
 ---
 
-## 4) Schema Registry notes
+## 2) Compatibility summary (CP 7.8.x, KRaft-only)
 
-- **Versioning:** Deploy **Schema Registry (SR)** with the **same CP version** you run.  
-- **Compatibility:** SR enforces schema compatibility modes (Backward by default). This allows staggered component upgrades while keeping producers/consumers working across versions.  
-- **Ops note:** SR remains component‑versioned with CP; check SR images/tags in your cluster to confirm the exact version.
-
-**Source:** SR fundamentals and compatibility documentation. [S10](#s10)
+| Component        | Version in this env  | Notes                                                |
+| ---------------- | -------------------- | ---------------------------------------------------- |
+| CFK (operator)   | 2.10.2               | Manages CP 7.x deployments on Kubernetes.            |
+| Kafka Broker     | 3.8.x (via CP 7.8.x) | KRaft roles required (`broker` and/or `controller`). |
+| Schema Registry  | 7.8.x (expected)     | Keep SR on the same CP minor.                        |
+| Connect / ksqlDB | 7.8.x (expected)     | Match CP; clients can vary within supported ranges.  |
 
 ---
 
-## 5) Quick commands (discover what’s running)
+## 3) Confirm **KRaft** configuration (namespace: `cdm-kafka`)
 
-> Replace the namespace `confluent` if you use a different one.
+**3.1 Roles and quorum voters (from pod env)**
 
-### 5.1 CFK operator version (image tag)
 ```bash
-kubectl -n confluent get pods -l app.kubernetes.io/name=confluent-operator   -o jsonpath='{.items[0].spec.containers[0].image}{"
-"}'
-# Example output: confluentinc/confluent-operator:0.1263.8
-# (CFK 3.0 bundle includes this operator image per release notes)
+# Roles on each broker pod
+kubectl -n cdm-kafka get pods -l confluent.io/type=Kafka \
+  -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[0].env[?(@.name=="KAFKA_CFG_PROCESS_ROLES")].value}{"\n"}{end}'
+
+# Quorum voters
+kubectl -n cdm-kafka get pods -l confluent.io/type=Kafka \
+  -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_QUORUM_VOTERS")].value}{"\n"}{end}'
 ```
 
-### 5.2 CP component versions (image tags)
+**3.2 Controller listener names (optional)**
 
-**Kafka brokers:**
 ```bash
-kubectl -n confluent get pods -l confluent.io/type=Kafka   -o jsonpath='{.items[*].spec.containers[0].image}{"
-"}'
-# e.g., confluentinc/cp-kafka:7.7.x or :8.0.x
+kubectl -n cdm-kafka get pods -l confluent.io/type=Kafka \
+  -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_LISTENER_NAMES")].value}{"\n"}{end}'
 ```
 
-**Schema Registry:**
+**3.3 Inspect `server.properties` (optional)**
+
 ```bash
-kubectl -n confluent get pods -l confluent.io/type=SchemaRegistry   -o jsonpath='{.items[*].spec.containers[0].image}{"
-"}'
-# e.g., confluentinc/cp-schema-registry:7.8.x
+# Replace <broker-pod>
+kubectl -n cdm-kafka exec -ti <broker-pod> -- bash -lc \
+'grep -E "^(process.roles|controller.quorum.voters|controller.listener.names)" /etc/kafka/server.properties || true'
 ```
 
-**(Optional) Show all CP images CFK is running:**
-```bash
-kubectl -n confluent get pods -o jsonpath='{range .items[*]}{.metadata.name}{" => "}{.spec.containers[*].image}{"
-"}{end}'
-```
+**Expected:**
 
-### 5.3 Check if the cluster is KRaft or ZooKeeper
-- **KRaft:** You will see **controller** roles defined in Kafka CRs and **no ZooKeeper pods**.
-- **ZooKeeper present:** `kubectl -n confluent get pods | grep -i zookeeper` returns pods. Plan a migration before CP 8.0.
-
-**Sources:** CFK/CP KRaft migration guides. [S2](#s2) • [S11](#s11)
+* `process.roles` set (`broker` and/or `broker,controller`)
+* `controller.quorum.voters` set
+* `controller.listener.names` set (e.g., `CONTROLLER`)
 
 ---
 
-## 6) Practical guidance (what to write in standards)
+## 4) Version discovery (images/tags)
 
-- **New installs (2025+):** Prefer **CP 8.0 + KRaft** on **CFK 3.0**.  
-- **Existing 7.x + ZooKeeper:**  
-  1) Upgrade to a 7.x that supports migration (7.7.1+ recommended),  
-  2) **Migrate to KRaft**,  
-  3) Upgrade to **CP 8.0** (CFK 3.0).  
-- **Component pinning:** Keep **SR/Connect/ksqlDB** aligned with **CP version**. Clients may be a different version, but verify client↔broker support windows in the interoperability matrix.
+```bash
+# CFK operator image
+kubectl -n cdm-kafka get pods -l app.kubernetes.io/name=confluent-operator \
+  -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}'
 
-**Sources:** CP upgrade and interoperability docs. [S9](#s9) • [S12](#s12)
+# Kafka broker images (CP version in tag)
+kubectl -n cdm-kafka get pods -l confluent.io/type=Kafka \
+  -o jsonpath='{.items[*].spec.containers[0].image}{"\n"}'
+# Expect: confluentinc/cp-kafka:7.8.3
 
----
-
-## 7) Source links (authoritative)
-
-- <a id="s1"></a>**S1 — CFK 3.0 release notes (compat & images):** https://docs.confluent.io/operator/current/release-notes.html  
-- <a id="s2"></a>**S2 — CFK upgrade/compat policy (2.9+ supports all supported CP versions):** https://docs.confluent.io/operator/current/co-upgrade-overview.html  
-- <a id="s3"></a>**S3 — CP 8.0 release notes (Kafka 4.0, KRaft only):** https://docs.confluent.io/platform/current/release-notes/index.html  
-- <a id="s4"></a>**S4 — CP 8.0 blog (built on Kafka 4.0):** https://www.confluent.io/blog/introducing-confluent-platform-8-0/  
-- <a id="s5"></a>**S5 — CP 7.7 release notes (Kafka 3.7):** https://docs.confluent.io/platform/7.7/release-notes/index.html  
-- <a id="s6"></a>**S6 — CP 7.8 blog (Kafka 3.8):** https://www.confluent.io/blog/introducing-confluent-platform-7-8/  
-- <a id="s7"></a>**S7 — Interoperability note (ZooKeeper removed in CP 8.0):** https://docs.confluent.io/platform/current/installation/versions-interoperability.html  
-- <a id="s8"></a>**S8 — Support advisory (ZK end-of-packaging timeline):** https://support.confluent.io/hc/en-us/articles/30881659449748-End-of-Support-for-ZooKeeper-in-Confluent-Platform  
-- <a id="s9"></a>**S9 — CP upgrade path (migrate to KRaft before 8.0):** https://docs.confluent.io/platform/current/installation/upgrade.html  
-- <a id="s10"></a>**S10 — Schema Registry fundamentals (compatibility modes):** https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html  
-- <a id="s11"></a>**S11 — CFK KRaft migration (operator flow):** https://docs.confluent.io/operator/current/co-migrate-kraft.html  
-- <a id="s12"></a>**S12 — Supported versions & interoperability (matrix):** https://docs.confluent.io/platform/current/installation/versions-interoperability.html
+# Schema Registry images (CP version in tag)
+kubectl -n cdm-kafka get pods -l confluent.io/type=SchemaRegistry \
+  -o jsonpath='{.items[*].spec.containers[0].image}{"\n"}'
+# Expect: confluentinc/cp-schema-registry:7.8.3
+```
 
 ---
 
-### Appendix: Why the matrix looks like this
-- CFK “controls” what you can deploy on Kubernetes, but component versions are **set by CP**.  
-- The **CFK 3.0** line formalizes support through **CP 8.0** and modern Kubernetes versions.  
-- Beginning with **CP 8.0**, Kafka is **KRaft‑only**; ZooKeeper is not packaged. Plan ZK → KRaft migrations in 7.x first.
+## 5) Upgrade guidance (KRaft-only path)
+
+* **Remain on CP 7.8.x:** Track latest **7.8.x** patch.
+* **Target CP 8.0.x (Kafka 4.0, KRaft):**
+
+  1. Ensure quorum health (`controller.quorum.voters` consistent; all controllers ready).
+  2. Upgrade **CFK to 3.0.x** (recommended for CP 8.0).
+  3. Perform a rolling upgrade of brokers and components to **CP 8.0.x**.
+  4. Verify client compatibility against the CP interoperability matrix.
+
+---
+
+## 6) Next confirmations
+
+* Kubernetes version and storage configuration for the `cdm-kafka` namespace’s cluster.
+* Exact **Schema Registry** tag and current **compatibility mode** (e.g., Backward).
+* Any component pins or custom images in Helm/kustomize overlays.
+
+---
+
+## 7) Reference links
+
+* Confluent Platform Release Notes (version mapping): [https://docs.confluent.io/platform/current/release-notes/index.html](https://docs.confluent.io/platform/current/release-notes/index.html)
+* Versions & Interoperability Matrix: [https://docs.confluent.io/platform/current/installation/versions-interoperability.html](https://docs.confluent.io/platform/current/installation/versions-interoperability.html)
+* Confluent for Kubernetes Release Notes: [https://docs.confluent.io/operator/current/release-notes.html](https://docs.confluent.io/operator/current/release-notes.html)
