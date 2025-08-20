@@ -125,12 +125,10 @@ kubectl -n cdm-kafka exec -ti <broker-pod> -- bash -lc \
 
 ## 4) KRaft sanity
 
-You’re right to ask. There isn’t a separate, branded “**KRaft version**” string. In practice you prove KRaft’s “version” by two things:
+In practice we check KRaft’s “version” by two things:
 
 1. the **Kafka core level** you’re running (from CP → Kafka map), and
 2. the **finalized features**—especially **`metadata.version`**—that the cluster advertises.
-
-Here’s a **drop-in replacement** for your Section 4 that adds a real, minimal **KRaft “version” check** and a simple **PASS/FAIL**:
 
 ---
 
@@ -138,8 +136,8 @@ Here’s a **drop-in replacement** for your Section 4 that adds a real, minimal 
 
 **What this checks**
 
-* You’re actually running KRaft (required settings are present).
-* The cluster’s **finalized metadata level** (aka “KRaft version”) is appropriate for your **Kafka core**.
+* We’re actually running KRaft as per required settings.
+* The cluster’s **finalized metadata level** (aka “KRaft version”) is appropriate for our **Kafka core**.
 
 ### 4.1 Required KRaft settings (present = good)
 
@@ -148,12 +146,11 @@ Here’s a **drop-in replacement** for your Section 4 that adds a real, minimal 
 kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_PROCESS_ROLES")].value}{"\n"}{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_LISTENER_NAMES")].value}{"\n"}{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_QUORUM_VOTERS")].value}{"\n"}'
 ```
 
-**PASS** if you see values for `PROCESS_ROLES`, `CONTROLLER_LISTENER_NAMES`, and `CONTROLLER_QUORUM_VOTERS`.
+**PASS** if values for `PROCESS_ROLES`, `CONTROLLER_LISTENER_NAMES`, and `CONTROLLER_QUORUM_VOTERS`.
 
 ### 4.2 KRaft “version” = Kafka core level + finalized **metadata.version**
 
-1. We have already mapped **CP → Kafka core** earlier (e.g., CP **7.8 → Kafka 3.8**).
-2. Now lets read the finalized features and locate **`metadata.version`**:
+1. To read the finalized features locate **`metadata.version`**:
 
 ```bash
 # From any broker pod; shows finalized features including metadata.version
@@ -165,7 +162,7 @@ kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/t
 
 **PASS / FAIL**
 
-* **PASS:** `metadata.version` ≤ your Kafka core level (e.g., metadata 3.8 with Kafka 3.8).
+* **PASS:** `metadata.version` ≤ your Kafka core level (e.g., metadata 3.8 with Kafka 3.8, or metadata 3.6 with Kafka 3.8, but no metadata 3.9 with Kafka 3.8).
 * **FAIL:** `metadata.version` above your Kafka core (fix by setting it back / completing the upgrade).
 * **Note:** During a rolling upgrade it can be **intentionally lower** than core; that’s fine until the roll completes.
 
@@ -173,9 +170,9 @@ kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/t
 
 ---
 
-## 5) Future-proof compatibility
+## 5) For future version compatibility of CP and CFK: 
 
-Add rows here as you adopt newer lines whenever a newer version of CFK is available:
+Add rows here whenever a newer version of CFK is available:
 
 | CP major          | CFK major | Notes                                               |
 | ----------------- | --------- | --------------------------------------------------- |
