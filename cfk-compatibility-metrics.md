@@ -1,4 +1,4 @@
-# CFK 2.10.2 — Version & Compatibility
+# Kafka/CFK — Version & Compatibility
 
 **Namespace:** `cdm-kafka`
 **Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)
