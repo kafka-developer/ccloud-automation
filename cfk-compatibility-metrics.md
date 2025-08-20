@@ -58,7 +58,7 @@ kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/t
 
 ## 2) Decide compatibility (operator ↔ platform)
 
-**Rule to enforce (extend when new majors arrive):**
+**Confluent Platform vs CFK Operator compatibility table is given below:**
 
 | CP major you run | Required CFK major | Why                                                |
 | ---------------- | ------------------ | -------------------------------------------------- |
@@ -66,7 +66,7 @@ kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/t
 | **8.x**          | **3.x**            | 8.x is KRaft-only; CFK 3.x aligns with that model. |
 | **9.x** (future) | **TBD**            | Add once vendor guidance is published.             |
 
-**Grab the majors and compare to the table**
+**Grab the majors and compare to the above table**
 
 ```bash
 # CP major (prints 7 / 8 / 9...)
