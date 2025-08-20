@@ -87,50 +87,38 @@ kubectl -n cdm-kafka get pods -l 'app.kubernetes.io/name=confluent-operator' \
 
 ---
 
-## 3) Schema Registry (SR) — versions & checks
+## 3) Schema Registry (SR) — Version Compatibility for Install/Upgrade
 
-**SR version**
+Goal: SR version should track your CP minor (e.g., CP 7.8 → SR 7.8.x).
 
-```bash
+**Check** SR version
+
+# Via REST (inside an SR pod)
 kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' -o name | head -n1 | cut -d/ -f2) \
   -- bash -lc 'curl -s localhost:8081/ | jq -r .version'
-# Expect it to align with CP minor (e.g., CP 7.8 → SR 7.8.x)
-```
 
-**SR compatibility mode**
+# Or via image tag
+kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' \
+  -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}' | awk -F: '{print $2}'
 
-```bash
-# Global mode (e.g., BACKWARD, FULL, FORWARD, NONE)
+
+SR version compatibility check
+
+>If SR 7.8.x and CP 7.8.x → compatible.
+
+>If SR 7.7.x but CP 7.8.x → upgrade SR to 7.8.x.
+
+>Keep SR aligned with CP minor during installs/upgrades.
+
+
+# SR root responds with version JSON (200 OK)
 kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'curl -s localhost:8081/config | jq -r .compatibilityLevel'
+  -- bash -lc 'curl -s -o /dev/null -w "%{http_code}\n" localhost:8081/'
 
-# Per-subject (replace <subject>)
-kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'curl -s localhost:8081/config/<subject> | jq -r .compatibilityLevel'
-```
-
-**SR quick practices**
-
-* Keep **SR version aligned with CP minor** (e.g., 7.8.x with CP 7.8.x).
-* Prefer **BACKWARD** or **FULL** unless you have a specific need.
-* Confirm the `_schemas` topic exists and is healthy:
-
-```bash
-# from a broker pod (replace <broker-pod> with an actual broker pod)
+# Ensure _schemas topic exists (from a broker pod; replace <broker-pod>)
 kubectl -n cdm-kafka exec -ti <broker-pod> -- bash -lc \
 'kafka-topics --bootstrap-server localhost:9092 --describe --topic _schemas || true'
-```
 
----
-
-## 4) KRaft sanity
-
-In practice we check KRaft’s “version” by two things:
-
-1. the **Kafka core level** you’re running (from CP → Kafka map), and
-2. the **finalized features**—especially **`metadata.version`**—that the cluster advertises.
-
----
 
 ## 4) KRaft compatibility & “version” (minimal)
 
