@@ -2,7 +2,11 @@
 
 **Namespace:** `cdm-kafka`  
 **Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)  
-**Purpose:** 1) See **compatibility** at a glance. 2) Read actual versions. 3) Decide if CFK↔CP pairing is supported. 4) Check Schema Registry. 5) Minimal KRaft sanity.
+**Purpose:** 1) See **compatibility** at a glance. 
+             2) Read actual versions. 
+             3) Decide if CFK↔CP pairing is supported. 
+             4) Check Schema Registry. 
+             5) Minimal KRaft sanity.
 
 > **Terminology:** CP versions look like **MAJOR.MINOR.PATCH** (e.g., **7.8.3**).  
 > **Major** = first number (**7**). **Minor** = first two numbers (**7.8**). **Patch** = last number (**3**).  
@@ -20,7 +24,7 @@
 | **7.9.x** | **3.9.x** | **2.11.x – 3.0.x** | 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.9.x** |
 | **8.0.x** *(KRaft-only)* | **4.0.x** | **3.0.x** | 3.0.x: 1.25–1.33 | **8.0.x** |
 
-How to use: find your **CP** row, make sure your **CFK** is within the compatible lines, confirm your **Kubernetes server** version is in range for that CFK line, and keep **SR** on the **same CP minor**.
+How to use: find  **CP** row, make sure **CFK** is within the compatible lines, confirm  **Kubernetes server** version is in range for that CFK line, and keep **SR** on the **same CP minor**
 
 ---
 
