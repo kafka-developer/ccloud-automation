@@ -2,11 +2,13 @@
 
 **Namespace:** `cdm-kafka`  
 **Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)  
-**Purpose:** >1) See **compatibility** at a glance. 
-             >2) Read actual versions. 
-             >3) Decide if CFK↔CP pairing is supported. 
-             >4) Check Schema Registry. 
-             >5) Minimal KRaft sanity.
+**Purpose:** 
+             
+ - 1) See **compatibility** at a glance. 
+ - 2) Read actual versions. 
+ - 3) Decide if CFK↔CP pairing is supported. 
+ - 4) Check Schema Registry. 
+ - 5) Minimal KRaft sanity.
 
 > **Terminology:** CP versions look like **MAJOR.MINOR.PATCH** (e.g., **7.8.3**).  
 > **Major** = first number (**7**). **Minor** = first two numbers (**7.8**). **Patch** = last number (**3**).  
@@ -24,7 +26,7 @@
 | **7.9.x** | **3.9.x** | **2.11.x – 3.0.x** | 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.9.x** |
 | **8.0.x** *(KRaft-only)* | **4.0.x** | **3.0.x** | 3.0.x: 1.25–1.33 | **8.0.x** |
 
-How to use: find  **CP** row, make sure **CFK** is within the compatible lines, confirm  **Kubernetes server** version is in range for that CFK line, and keep **SR** on the **same CP minor**
+**How to use find versions**: find  **CP** row, make sure **CFK** is within the compatible lines, confirm  **Kubernetes server** version is in range for that CFK line, and keep **SR** on the **same CP minor**
 
 ---
 
@@ -128,7 +130,7 @@ kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'kafka-topics --boots
 
 ---
 
-## 4) KRaft compatibility & “version” (minimal)
+## 4) KRaft compatibility & “version” 
 
 **What this checks**  
 - You’re running KRaft (required settings present).  
@@ -167,7 +169,6 @@ Add rows here whenever a newer version of CFK is available:
 | 7.x | 2.x | Current pairing. |
 | 8.x | 3.x | KRaft-only platform; aligned operator. |
 | **9.x** (future) | **?.x** | Add once confirmed in release notes/support matrix. |
-| **10.x** (future) | **?.x** | Add once confirmed. |
 
 ---
 
@@ -185,7 +186,7 @@ kubectl -n cdm-kafka get pod kafka-0 -o jsonpath='{.status.containerStatuses[0].
 "}'
 ```
 
-**6.3 IBP during upgrades (keep it simple)**  
+**6.3 IBP during upgrades **  
 Rule: keep `inter.broker.protocol.version` (**IBP**) at the **current Kafka core level** during the roll; after all brokers are on the new binaries and healthy, set IBP to the **new** core level.
 
 **Check IBP now**
@@ -225,4 +226,3 @@ kubectl -n cdm-kafka get pods -w
 ```
 
 ---
-
