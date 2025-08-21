@@ -2,11 +2,11 @@
 
 **Namespace:** `cdm-kafka`  
 **Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)  
-**Purpose:** 1) See **compatibility** at a glance. 
-             2) Read actual versions. 
-             3) Decide if CFK↔CP pairing is supported. 
-             4) Check Schema Registry. 
-             5) Minimal KRaft sanity.
+**Purpose:** >1) See **compatibility** at a glance. 
+             >2) Read actual versions. 
+             >3) Decide if CFK↔CP pairing is supported. 
+             >4) Check Schema Registry. 
+             >5) Minimal KRaft sanity.
 
 > **Terminology:** CP versions look like **MAJOR.MINOR.PATCH** (e.g., **7.8.3**).  
 > **Major** = first number (**7**). **Minor** = first two numbers (**7.8**). **Patch** = last number (**3**).  
