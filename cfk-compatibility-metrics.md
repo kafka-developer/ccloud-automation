@@ -1,226 +1,224 @@
 # Kafka/CFK — Version & Compatibility
 
-**Namespace:** `cdm-kafka`
-**Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)
-**Purpose:** 1) Read actual versions. 
-             2) Decide if CFK↔CP pairing is supported. 
-             3) Check Schema Registry. 4) Minimal KRaft sanity.
+**Namespace:** `cdm-kafka`  
+**Scope:** CFK operator + Kafka brokers + Schema Registry (no ZooKeeper)  
+**Purpose:** 1) See **compatibility** at a glance. 2) Read actual versions. 3) Decide if CFK↔CP pairing is supported. 4) Check Schema Registry. 5) Minimal KRaft sanity.
 
-> **Terminology:** CP versions look like **MAJOR.MINOR.PATCH** (e.g., **7.8.3**).
-> **Major** = first number (**7**). **Minor** = first two numbers (**7.8**). **Patch** = last number (**3**).
-> “**Kafka core**” is the Apache Kafka version packaged by that CP line (see the table below).
+> **Terminology:** CP versions look like **MAJOR.MINOR.PATCH** (e.g., **7.8.3**).  
+> **Major** = first number (**7**). **Minor** = first two numbers (**7.8**). **Patch** = last number (**3**).  
+> “**Kafka core**” is the Apache Kafka version packaged by that CP line.
+
+---
+
+## 0) Compatibility at a glance (Kubernetes ↔ CFK ↔ CP/Kafka ↔ Schema Registry)
+
+| Confluent Platform (CP) | Kafka core (bundled) | Compatible **CFK** lines | **Supported Kubernetes** (by CFK line) | Schema Registry (SR) |
+|---|---|---|---|---|
+| **7.6.x** | **3.6.x** | **2.8.x – 3.0.x** | 2.8.x: 1.25–1.29 · 2.9.x: 1.25–1.30 · 2.10.x: 1.25–1.31 · 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.6.x** |
+| **7.7.x** | **3.7.x** | **2.9.x – 3.0.x** | 2.9.x: 1.25–1.30 · 2.10.x: 1.25–1.31 · 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.7.x** |
+| **7.8.x** | **3.8.x** | **2.10.x – 3.0.x** | 2.10.x: 1.25–1.31 · 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.8.x** |
+| **7.9.x** | **3.9.x** | **2.11.x – 3.0.x** | 2.11.x: 1.25–1.32 · 3.0.x: 1.25–1.33 | **7.9.x** |
+| **8.0.x** *(KRaft-only)* | **4.0.x** | **3.0.x** | 3.0.x: 1.25–1.33 | **8.0.x** |
+
+How to use: find your **CP** row, make sure your **CFK** is within the compatible lines, confirm your **Kubernetes server** version is in range for that CFK line, and keep **SR** on the **same CP minor**.
 
 ---
 
 ## 1) Check the versions
 
-**Confluent Platform (CP) — from a broker image tag**
-
+**Confluent Platform (CP) — from broker image tags**
 ```bash
-# CP full version (e.g., 7.8.3)
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' \
-  -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}' | awk -F: '{print $2}'
-
-# CP minor only (e.g., 7.8) — useful for Kafka core mapping
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' \
-  -o jsonpath='{.items[0].spec.containers[0].image}' | awk -F: '{print $2}' | cut -d. -f1-2
+kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
+"}{end}' | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | sort -u
 ```
 
-**CFK operator / bundle (use the init tag as CFK version)**
-
+**CP minor only (e.g., `7.8`) — for Kafka-core mapping**
 ```bash
-kubectl -n cdm-kafka get pods -l 'app.kubernetes.io/name=confluent-operator' \
-  -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}{.items[0].spec.initContainers[0].image}{"\n"}'
-# Example: confluent-init-container:2.10.2  → CFK = 2.10.2
+kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
+"}{end}' | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | cut -d. -f1-2 | sort -u
+```
+
+**CFK operator / bundle (init tag = CFK version)**
+```bash
+NS=cdm-kafka
+OP=$(kubectl -n "$NS" get pods -o name | grep -E '^pod/confluent-operator-' | head -n1 | cut -d/ -f2)
+( kubectl -n "$NS" get pods -o jsonpath='{range .items[*]}{.spec.initContainers[*].image}{"
+"}{end}'   | tr ' ' '
+' | grep -i 'confluent.*init-container' | awk -F: '{print $2}'
+  kubectl -n "$NS" get pod "$OP" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}{"
+"}'
+) | sed '/^$/d' | head -n1
+```
+
+**Schema Registry (SR) version (if SR is deployed)**
+```bash
+SR=$(kubectl -n cdm-kafka get pods -o name | grep -E '^pod/(schema-registry|sr)-' | head -n1 | cut -d/ -f2); if [ -n "$SR" ]; then kubectl -n cdm-kafka exec -ti "$SR" -- bash -lc 'curl -s localhost:8081/ | jq -r .version'; else echo "No Schema Registry pod found"; fi
+```
+
+**Kubernetes server version (portable)**
+```bash
+kubectl get --raw /version | jq -r '.major+"."+ (.minor|sub("\+.*$";""))'
 ```
 
 **Kafka core (CP → Kafka mapping)**
 
 | CP minor | Kafka core |
-| -------- | ---------- |
-| 7.6      | 3.6        |
-| 7.7      | 3.7        |
-| 7.8      | 3.8        |
-| 8.0      | 4.0        |
+|---|---|
+| 7.6 | 3.6 |
+| 7.7 | 3.7 |
+| 7.8 | 3.8 |
+| 7.9 | 3.9 |
+| 8.0 | 4.0 |
 
-3. Why “Optional Sanity from Inside a Broker”?
-
->You can use the command below to verify the Kafka core version actually running inside your broker container. It's always good to very the running versions instead of 
->completely relying on the official confluent document.**
-
-
+**Optional sanity from inside a broker**
 ```bash
-kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'kafka-topics --version || kafka-topics.sh --version'
+kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'kafka-topics --version || kafka-topics.sh --version'
 ```
 
 ---
 
 ## 2) Decide compatibility (operator ↔ platform)
 
-**Confluent Platform vs CFK Operator compatibility table is given below:**
+**Confluent Platform vs CFK Operator compatibility table**
 
-| CP major you run | Required CFK major | Why                                                |
-| ---------------- | ------------------ | -------------------------------------------------- |
-| **7.x**          | **2.x**            | Matches current operator/platform lines.           |
-| **8.x**          | **3.x**            | 8.x is KRaft-only; CFK 3.x aligns with that model. |
-| **9.x** (future) | **TBD**            | Add once vendor guidance is published.             |
+| CP major you run | Required CFK major | Why |
+|---|---|---|
+| **7.x** | **2.x** | Matches current operator/platform lines. |
+| **8.x** | **3.x** | 8.x is KRaft-only; CFK 3.x aligns with that model. |
+| **9.x** (future) | **TBD** | Add once vendor guidance is published. |
 
-**Grab the majors and compare to the above table**
-
+**Grab the majors and compare to the table**
 ```bash
-# CP major (prints 7 / 8 / 9...)
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' \
-  -o jsonpath='{.items[0].spec.containers[0].image}' | awk -F: '{print $2}' | cut -d. -f1
-
-# CFK major (prints 2 / 3 / 4...)
-kubectl -n cdm-kafka get pods -l 'app.kubernetes.io/name=confluent-operator' \
-  -o jsonpath='{.items[0].spec.initContainers[0].image}' | awk -F: '{print $2}' | cut -d. -f1
+CP_MAJOR=$(
+  kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
+"}{end}'   | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | head -n1 | cut -d. -f1
+)
+CFK_MAJOR=$(
+  NS=cdm-kafka; OP=$(kubectl -n "$NS" get pods -o name | grep -E '^pod/confluent-operator-' | head -n1 | cut -d/ -f2);   ( kubectl -n "$NS" get pods -o jsonpath='{range .items[*]}{.spec.initContainers[*].image}{"
+"}{end}' | tr " " "
+" | grep -i "confluent.*init-container" | awk -F: "{print \$2}" ;     kubectl -n "$NS" get pod "$OP" -o jsonpath="{.metadata.labels.app\.kubernetes\.io/version}{"
+"}" ) | sed "/^$/d" | head -n1 | cut -d. -f1
+)
+echo "CP major=$CP_MAJOR  CFK major=$CFK_MAJOR"
 ```
 
-**Interpretation**
-
-* CP **7** with CFK **2** → compatible.
-* CP **8** with CFK **3** → compatible (KRaft-only).
-* CP **8** with CFK **2** → not compatible → upgrade CFK to **3.x** first.
-* When a new CP or CFK major appears, **add a row** above and use the same quick compare.
+**Interpretation**  
+- CP **7** with CFK **2** → compatible.  
+- CP **8** with CFK **3** → compatible (KRaft-only).  
+- CP **8** with CFK **2** → not compatible → upgrade CFK to **3.x** first.  
+- When a new CP or CFK major appears, add a row and use the same quick compare.
 
 ---
 
 ## 3) Schema Registry (SR) — Version Compatibility for Install/Upgrade
 
-Goal: SR version should track your CP minor (e.g., CP 7.8 → SR 7.8.x).
+SR should track your **CP minor** (e.g., CP **7.8** → SR **7.8.x**). Keep SR aligned during installs/upgrades.
 
-**Check** SR version
-
-# Via REST (inside an SR pod)
-kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'curl -s localhost:8081/ | jq -r .version'
-
-# Or via image tag
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' \
-  -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}' | awk -F: '{print $2}'
-
-
-SR version compatibility check
-
->If SR 7.8.x and CP 7.8.x → compatible.
-
->If SR 7.7.x but CP 7.8.x → upgrade SR to 7.8.x.
-
->Keep SR aligned with CP minor during installs/upgrades.
-
-
-# SR root responds with version JSON (200 OK)
-kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=SchemaRegistry' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'curl -s -o /dev/null -w "%{http_code}\n" localhost:8081/'
-
-# Ensure _schemas topic exists (from a broker pod; replace <broker-pod>)
-kubectl -n cdm-kafka exec -ti <broker-pod> -- bash -lc \
-'kafka-topics --bootstrap-server localhost:9092 --describe --topic _schemas || true'
-
-
-## 4) KRaft compatibility & “version” (minimal)
-
-**What this checks**
-
-* We’re actually running KRaft as per required settings.
-* The cluster’s **finalized metadata level** (aka “KRaft version”) is appropriate for our **Kafka core**.
-
-### 4.1 Required KRaft settings (present = good)
-
+**Quick SR health checks (optional)**
 ```bash
-# Expect non-empty values for all three
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_PROCESS_ROLES")].value}{"\n"}{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_LISTENER_NAMES")].value}{"\n"}{.items[0].spec.containers[0].env[?(@.name=="KAFKA_CFG_CONTROLLER_QUORUM_VOTERS")].value}{"\n"}'
+SR=$(kubectl -n cdm-kafka get pods -o name | grep -E '^pod/(schema-registry|sr)-' | head -n1 | cut -d/ -f2); [ -n "$SR" ] && kubectl -n cdm-kafka exec -ti "$SR" -- bash -lc 'curl -s -o /dev/null -w "%{http_code}
+" localhost:8081/' || echo "No Schema Registry pod found"
+
+kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'kafka-topics --bootstrap-server localhost:9092 --describe --topic _schemas || true'
 ```
-
-**PASS** if values for `PROCESS_ROLES`, `CONTROLLER_LISTENER_NAMES`, and `CONTROLLER_QUORUM_VOTERS`.
-
-### 4.2 KRaft “version” = Kafka core level + finalized **metadata.version**
-
-1. To read the finalized features locate **`metadata.version`**:
-
-```bash
-# From any broker pod; shows finalized features including metadata.version
-kubectl -n cdm-kafka exec -ti $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o name | head -n1 | cut -d/ -f2) \
-  -- bash -lc 'kafka-features --bootstrap-server localhost:9092 describe || true'
-```
-
-**Read it:** In the output, find `metadata.version`. It should be at or below your **Kafka core** level (e.g., for Kafka **3.8**, expect a 3.8-level metadata version).
-
-**PASS / FAIL**
-
-* **PASS:** `metadata.version` ≤ your Kafka core level (e.g., metadata 3.8 with Kafka 3.8, or metadata 3.6 with Kafka 3.8, but no metadata 3.9 with Kafka 3.8).
-* **FAIL:** `metadata.version` above your Kafka core (fix by setting it back / completing the upgrade).
-* **Note:** During a rolling upgrade it can be **intentionally lower** than core; that’s fine until the roll completes.
-
-*(Important: In KRaft, `metadata.version` is the cluster’s finalized metadata feature level—this is what people often mean by “KRaft version.”)*
 
 ---
 
-## 5) For future version compatibility of CP and CFK: 
+## 4) KRaft compatibility & “version” (minimal)
+
+**What this checks**  
+- You’re running KRaft (required settings present).  
+- The cluster’s **finalized metadata level** (`metadata.version`) is appropriate for your **Kafka core**.
+
+**4.1 Required KRaft settings (present = good)**
+```bash
+NS=cdm-kafka
+for p in $(kubectl -n "$NS" get pods -o name | sed 's#pod/##' | grep -E '^(kafka-|kraftcontroller-)'); do
+  CFLAG=""; [[ "$p" == kafka-* ]] && CFLAG="-c kafka"
+  echo "== $p ==";
+  kubectl -n "$NS" exec -ti "$p" $CFLAG -- bash -lc '
+    for f in /etc/kafka/server.properties /etc/kafka/kraft/server.properties; do
+      if [ -f "$f" ]; then
+        sed -n -e "/^[[:space:]]*#/d" -e "/^[[:space:]]*$/d"           -e "/^\(process\.roles\|controller\.listener\.names\|controller\.quorum\.voters\)\s*=/p" "$f"
+      fi
+    done'
+done
+```
+**PASS** if `process.roles`, `controller.listener.names`, and `controller.quorum.voters` are non-empty (and voters use real DNS:port, not `localhost`).
+
+**4.2 KRaft “version” = finalized `metadata.version`**
+```bash
+kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'kafka-features --bootstrap-server localhost:9092 describe || true'
+```
+**PASS** if `metadata.version` is **≤** your Kafka core level (e.g., Kafka **3.8** ⇒ metadata.version **3.8** or lower during upgrade).
+
+---
+
+## 5) For future version compatibility of CP and CFK
 
 Add rows here whenever a newer version of CFK is available:
 
-| CP major          | CFK major | Notes                                               |
-| ----------------- | --------- | --------------------------------------------------- |
-| 7.x               | 2.x       | Current pairing.                                    |
-| 8.x               | 3.x       | KRaft-only platform; aligned operator.              |
-| **9.x** (future)  | **?.x**   | Add once confirmed in release notes/support matrix. |
-| **10.x** (future) | **?.x**   | Add once confirmed.                                 |
+| CP major | CFK major | Notes |
+|---|---|---|
+| 7.x | 2.x | Current pairing. |
+| 8.x | 3.x | KRaft-only platform; aligned operator. |
+| **9.x** (future) | **?.x** | Add once confirmed in release notes/support matrix. |
+| **10.x** (future) | **?.x** | Add once confirmed. |
 
 ---
 
 ## 6) Gotchas
 
 **6.1 Rolling upgrades show mixed versions briefly**
-During a broker rollout, some pods run `7.8.2` while others already run `7.8.3`. That’s normal mid-upgrade.
-**Do this:** finish the roll, then re-run your version/compat checks.
-
 ```bash
-# Show each broker’s image tag (expect them to match when the roll is done)
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' \
-  -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[0].image}{"\n"}{end}'
+kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[*].image}{"
+"}{end}' | grep '^kafka-'
 ```
 
 **6.2 Private/air-gapped registries can hide tags**
-If images are pulled by **digest** (`sha256:...`), you won’t see a readable tag like `7.8.3`.
-**Do this:** map the digest to a CP version using your internal registry/map, or add a simple annotation (e.g., `cpVersion: "7.8.3"`) on your StatefulSet.
-
 ```bash
-# See the digest of a running broker image
-kubectl -n cdm-kafka get pod $(kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o name | head -n1 | cut -d/ -f2) \
-  -o jsonpath='{.status.containerStatuses[0].imageID}{"\n"}'
+kubectl -n cdm-kafka get pod kafka-0 -o jsonpath='{.status.containerStatuses[0].imageID}{"
+"}'
 ```
 
-**6.3 IBP during upgrades (keep it simple)**
-**Rule:** During a rolling upgrade, keep `inter.broker.protocol.version` (**IBP**) at the **current Kafka core level**.
-After all brokers are on the new binaries and healthy, set IBP to the **new** core level.
+**6.3 IBP during upgrades (keep it simple)**  
+Rule: keep `inter.broker.protocol.version` (**IBP**) at the **current Kafka core level** during the roll; after all brokers are on the new binaries and healthy, set IBP to the **new** core level.
 
-Quick map we are using:
-
-* CP 7.6 → Kafka core 3.6 → **IBP = 3.6**
-* CP 7.7 → 3.7 → **IBP = 3.7**
-* CP 7.8 → 3.8 → **IBP = 3.8**
-* CP 8.0 → 4.0 → **IBP = 4.0**
-
-Check what IBP is right now:
-
+**Check IBP now**
 ```bash
-BROKER=$(kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -o name | head -n1 | cut -d/ -f2)
-kubectl -n cdm-kafka exec -ti "$BROKER" -- bash -lc \
-'grep -E "^inter.broker.protocol.version" /etc/kafka/server.properties || echo "IBP not set (uses binary default)"'
+kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'grep -E "^inter.broker.protocol.version" /etc/kafka/server.properties || echo "IBP not set (uses binary default)"'
 ```
 
-**Rollback IBP in case of an issue:**
-Set IBP back to the last working core level (e.g., `3.8`), let CFK roll brokers, then try again later.
-
+**Set IBP explicitly (your cluster name = `kafka`)**
 ```bash
-# Example: set IBP back to 3.8 via patch (adjust <cluster-name>)
-kubectl -n cdm-kafka patch kafka <cluster-name> --type='json' \
-  -p='[{"op":"add","path":"/spec/kafka/configOverrides/server/-","value":"inter.broker.protocol.version=3.8"}]'
-# Watch the roll:
-kubectl -n cdm-kafka get pods -l 'confluent.io/type=Kafka' -w
+NS=cdm-kafka
+CLUSTER=kafka
+kubectl -n "$NS" patch kafka "$CLUSTER" --type='merge' -p '
+spec:
+  kafka:
+    configOverrides:
+      server:
+      - inter.broker.protocol.version=3.8
+'
+```
+
+**After all brokers are upgraded and healthy, raise IBP to the new core (example: CP 8.0 → 4.0)**
+```bash
+NS=cdm-kafka
+CLUSTER=kafka
+kubectl -n "$NS" patch kafka "$CLUSTER" --type='merge' -p '
+spec:
+  kafka:
+    configOverrides:
+      server:
+      - inter.broker.protocol.version=4.0
+'
+```
+
+**Watch the roll**
+```bash
+kubectl -n cdm-kafka get pods -w
 ```
 
 ---
+
