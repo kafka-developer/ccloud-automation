@@ -188,7 +188,7 @@ kubectl -n cdm-kafka get pods -o json \
 **6.3 IBP during upgrades **  
 Rule: keep `inter.broker.protocol.version` (**IBP**) at the **current Kafka core level** during the roll; after all brokers are on the new binaries and healthy, set IBP to the **new** core level.
 
-**Check IBP now**
+**Check IBP now **
 ```bash
 kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'grep -E "^inter.broker.protocol.version" /etc/kafka/server.properties || echo "IBP not set (uses binary default)"'
 ```
