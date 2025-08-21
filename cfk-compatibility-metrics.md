@@ -34,26 +34,26 @@
 
 **Confluent Platform (CP) — from broker image tags**
 ```bash
-kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
-"}{end}' | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | sort -u
+kubectl -n cdm-kafka get pods -o json \
+| jq -r '.items[] | select(.metadata.name|test("^kafka-")) | .spec.containers[].image' \
+| awk -F: '{print $2}' | sort -u
 ```
 
 **CP minor only (e.g., `7.8`) — for Kafka-core mapping**
 ```bash
-kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
-"}{end}' | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | cut -d. -f1-2 | sort -u
+kubectl -n cdm-kafka get pods -o json \
+| jq -r '.items[] | select(.metadata.name|test("^kafka-")) | .spec.containers[].image' \
+| awk -F: '{print $2}' | cut -d. -f1-2 | sort -u
 ```
 
 **CFK operator / bundle (init tag = CFK version)**
 ```bash
 NS=cdm-kafka
 OP=$(kubectl -n "$NS" get pods -o name | grep -E '^pod/confluent-operator-' | head -n1 | cut -d/ -f2)
-( kubectl -n "$NS" get pods -o jsonpath='{range .items[*]}{.spec.initContainers[*].image}{"
-"}{end}'   | tr ' ' '
-' | grep -i 'confluent.*init-container' | awk -F: '{print $2}'
-  kubectl -n "$NS" get pod "$OP" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}{"
-"}'
+( kubectl -n "$NS" get pods -o json | jq -r '.items[] | .spec.initContainers[]?.image' | grep -i 'confluent.*init-container' | awk -F: '{print $2}' | head -n1
+  kubectl -n "$NS" get pod "$OP" -o json | jq -r '.metadata.labels["app.kubernetes.io/version"] // empty'
 ) | sed '/^$/d' | head -n1
+
 ```
 
 **Schema Registry (SR) version (if SR is deployed)**
@@ -63,7 +63,8 @@ SR=$(kubectl -n cdm-kafka get pods -o name | grep -E '^pod/(schema-registry|sr)-
 
 **Kubernetes server version (portable)**
 ```bash
-kubectl get --raw /version | jq -r '.major+"."+ (.minor|sub("\+.*$";""))'
+kubectl get --raw /version | jq -r '.major+"."+ (.minor|sub("\\+.*$";""))'
+
 ```
 
 **Kafka core (CP → Kafka mapping)**
@@ -95,17 +96,12 @@ kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'kafka-topics --versi
 
 **Grab the majors and compare to the table**
 ```bash
-CP_MAJOR=$(
-  kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].image}{"
-"}{end}'   | awk '$1 ~ /^kafka-/{print $2}' | awk -F: '{print $2}' | head -n1 | cut -d. -f1
-)
-CFK_MAJOR=$(
-  NS=cdm-kafka; OP=$(kubectl -n "$NS" get pods -o name | grep -E '^pod/confluent-operator-' | head -n1 | cut -d/ -f2);   ( kubectl -n "$NS" get pods -o jsonpath='{range .items[*]}{.spec.initContainers[*].image}{"
-"}{end}' | tr " " "
-" | grep -i "confluent.*init-container" | awk -F: "{print \$2}" ;     kubectl -n "$NS" get pod "$OP" -o jsonpath="{.metadata.labels.app\.kubernetes\.io/version}{"
-"}" ) | sed "/^$/d" | head -n1 | cut -d. -f1
-)
-echo "CP major=$CP_MAJOR  CFK major=$CFK_MAJOR"
+kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc '
+for f in /etc/kafka/server.properties /etc/kafka/kraft/server.properties; do
+  [ -f "$f" ] && { echo "-- $f"; sed -n -e "s/^[[:space:]]*//" -e "/^#/d" \
+    -e "/^\(node\.id\|broker\.id\)[[:space:]]*=/p" "$f"; }
+done'
+
 ```
 
 **Interpretation**  
@@ -118,7 +114,7 @@ echo "CP major=$CP_MAJOR  CFK major=$CFK_MAJOR"
 
 ## 3) Schema Registry (SR) — Version Compatibility for Install/Upgrade
 
-SR should track your **CP minor** (e.g., CP **7.8** → SR **7.8.x**). Keep SR aligned during installs/upgrades.
+SR should track **CP minor** (e.g., CP **7.8** → SR **7.8.x**). Keep SR aligned during installs/upgrades.
 
 **Quick SR health checks (optional)**
 ```bash
@@ -176,14 +172,17 @@ Add rows here whenever a newer version of CFK is available:
 
 **6.1 Rolling upgrades show mixed versions briefly**
 ```bash
-kubectl -n cdm-kafka get pods -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[*].image}{"
-"}{end}' | grep '^kafka-'
+kubectl -n cdm-kafka get pods -o json \
+| jq -r '.items[] | select(.metadata.name|test("^kafka-")) | "\(.metadata.name): \(.spec.containers[].image)"'
+
 ```
 
-**6.2 Private/air-gapped registries can hide tags**
+**6.2 Private/air-gapped registries can hide tags. For unique CP tags**
 ```bash
-kubectl -n cdm-kafka get pod kafka-0 -o jsonpath='{.status.containerStatuses[0].imageID}{"
-"}'
+kubectl -n cdm-kafka get pods -o json \
+| jq -r '.items[] | select(.metadata.name|test("^kafka-")) | .spec.containers[].image' \
+| awk -F: '{print $2}' | sort -u
+
 ```
 
 **6.3 IBP during upgrades **  
@@ -192,37 +191,6 @@ Rule: keep `inter.broker.protocol.version` (**IBP**) at the **current Kafka core
 **Check IBP now**
 ```bash
 kubectl -n cdm-kafka exec -ti kafka-0 -c kafka -- bash -lc 'grep -E "^inter.broker.protocol.version" /etc/kafka/server.properties || echo "IBP not set (uses binary default)"'
-```
-
-**Set IBP explicitly (your cluster name = `kafka`)**
-```bash
-NS=cdm-kafka
-CLUSTER=kafka
-kubectl -n "$NS" patch kafka "$CLUSTER" --type='merge' -p '
-spec:
-  kafka:
-    configOverrides:
-      server:
-      - inter.broker.protocol.version=3.8
-'
-```
-
-**After all brokers are upgraded and healthy, raise IBP to the new core (example: CP 8.0 → 4.0)**
-```bash
-NS=cdm-kafka
-CLUSTER=kafka
-kubectl -n "$NS" patch kafka "$CLUSTER" --type='merge' -p '
-spec:
-  kafka:
-    configOverrides:
-      server:
-      - inter.broker.protocol.version=4.0
-'
-```
-
-**Watch the roll**
-```bash
-kubectl -n cdm-kafka get pods -w
 ```
 
 ---
