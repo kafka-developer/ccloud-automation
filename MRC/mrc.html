@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kafka Multi‑Region Clusters (MRC) — On‑Prem + AWS DR Tutorial</title>
+  <style>
+    :root { --bg:#0b1220; --card:#0f172a; --ink:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:28px;margin:0 0 12px}
+    p,li{color:var(--ink)}
+    .hint{color:var(--muted)}
+    iframe{width:100%;border:1px solid #1f2937;border-radius:12px;background:#000;min-height:1200px}
+    .code{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Kafka Multi‑Region Clusters (MRC) — On‑Prem + AWS DR Tutorial (Embedded)</h1>
+    <p class="hint">Copy this <strong>&lt;iframe&gt;</strong> anywhere. It contains a full, scrollable tutorial + Q&amp;A. Resize height as you like.</p>
+
+    <!-- Embeddable iframe with inline HTML via srcdoc -->
+    <iframe id="mrcFrame" title="Kafka MRC Tutorial"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-top-navigation-by-user-activation"
+            loading="lazy"
+            srcdoc='<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+      :root{--bg:#0a0f1a;--card:#0f172a;--soft:#111827;--ink:#e5e7eb;--muted:#a3b2c5;--accent:#60a5fa;--green:#34d399;--red:#f87171}
+      html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+      .page{max-width:1100px;margin:0 auto;padding:28px}
+      h1{font-size:30px;margin:0 0 10px}
+      h2{font-size:22px;margin:28px 0 10px}
+      h3{font-size:18px;margin:18px 0 8px;color:var(--accent)}
+      .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:18px;margin:16px 0}
+      .toc a{color:var(--accent);text-decoration:none}
+      .toc a:hover{text-decoration:underline}
+      code, pre{font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+      pre{background:var(--soft);border:1px solid #1f2937;border-radius:12px;padding:14px;overflow:auto}
+      .badge{display:inline-block;background:#0b5; color:white; padding:2px 8px; border-radius:999px; font-size:12px}
+      .qa details{background:var(--soft);border:1px solid #1f2937;border-radius:12px;margin:10px 0}
+      .qa summary{cursor:pointer;padding:12px 14px;font-weight:600}
+      .qa .a{padding:0 14px 14px}
+      .tip{border-left:4px solid var(--accent);padding:8px 12px;background:#0b1120;border-radius:8px;margin:10px 0;color:#dbeafe}
+      .warn{border-left:4px solid var(--red);padding:8px 12px;background:#1a0f10;border-radius:8px;margin:10px 0;color:#fde2e2}
+      .ok{border-left:4px solid var(--green);padding:8px 12px;background:#07160f;border-radius:8px;margin:10px 0;color:#d1fae5}
+      ul{margin:8px 0 8px 22px}
+      .footer{color:#9aa7bd;font-size:13px;margin-top:24px}
+      a{color:#93c5fd}
+      .kbd{padding:1px 6px;border:1px solid #374151;border-bottom-width:2px;border-radius:6px;background:#111827}
+    </style>
+    <body>
+      <div class="page">
+        <h1>Kafka MRC — On‑Prem + AWS Hybrid DR Tutorial</h1>
+        <p class="tip">Scope: <strong>Confluent Kafka Multi‑Region Clusters (MRC)</strong> only. <em>No MirrorMaker 2.</em> Includes design, configs, failure drills, and interview Q&amp;A.</p>
+
+        <div class="card toc">
+          <h3>Table of Contents</h3>
+          <ol>
+            <li><a href="#sec1">Section 1 — Core MRC Concepts</a></li>
+            <li><a href="#sec2">Section 2 — Hybrid On‑Prem + AWS Design</a></li>
+            <li><a href="#sec3">Section 3 — Disaster Recovery (DR) Scenarios</a></li>
+            <li><a href="#sec4">Section 4 — Operations & Monitoring</a></li>
+            <li><a href="#sec5">Section 5 — Common Challenges & Mitigations</a></li>
+            <li><a href="#sec6">Section 6 — Config & Tuning Cheat‑Sheet</a></li>
+            <li><a href="#sec7">Section 7 — Practice Drills & Checklists</a></li>
+            <li><a href="#refs">References</a></li>
+          </ol>
+        </div>
+
+        <!-- Section 1 -->
+        <div id="sec1" class="card">
+          <h2>Section 1 — Core MRC Concepts</h2>
+          <p><strong>What is MRC?</strong> Confluent’s Multi‑Region Clusters let one logical Kafka cluster span multiple regions (e.g., on‑prem + AWS). You can choose <em>per topic</em> whether replication is <strong> synchronous</strong> (no‑loss writes, higher latency) or <strong>asynchronous</strong> (low latency, RPO &gt; 0). Consumers can use <em>follower fetching</em> to read from local replicas.</p>
+
+          <h3>Tutorial — Mental Model</h3>
+          <ul>
+            <li>Think in <em>failure domains</em>: DC/AZ/region. Place replicas across domains.</li>
+            <li>Pick replication mode per topic: <strong>sync</strong> for critical ledgers, <strong>async (observers)</strong> for high‑throughput streams.</li>
+            <li>Enable <strong>follower fetching</strong> so consumers in AWS read locally (cut egress & latency).</li>
+          </ul>
+
+          <div class="qa">
+            <details>
+              <summary>Q1. MRC vs MirrorMaker/Cluster Linking?</summary>
+              <div class="a">MRC is <em>one</em> logical cluster stretched across regions; replication is built into the cluster and can be synchronous or asynchronous per topic. MirrorMaker/Linking replicate <em>between</em> independent clusters. You asked to exclude MM2; here we focus purely on MRC.
+              </div>
+            </details>
+            <details>
+              <summary>Q2. Synchronous vs Asynchronous (observers) — when to choose?</summary>
+              <div class="a"><strong>Sync</strong>: zero‑loss (RPO=0) but higher write latency (acks wait for remote ISR). Use for orders, payments, inventory. <strong>Async (observers)</strong>: local acks, remote catch‑up; minimal producer latency, tiny RPO>0; use for analytics, clickstreams, telemetry.</div>
+            </details>
+            <details>
+              <summary>Q3. What is follower fetching and why does it matter?</summary>
+              <div class="a">Consumers fetch from the <em>nearest follower</em> replica instead of the leader. This slashes cross‑region bandwidth and tail latency, important in hybrid topologies.</div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Section 2 -->
+        <div id="sec2" class="card">
+          <h2>Section 2 — Hybrid On‑Prem + AWS Design</h2>
+          <h3>Tutorial — Step‑by‑Step Design</h3>
+          <ol>
+            <li><strong>Network</strong>: Establish private connectivity (AWS Direct Connect preferred; VPN as backup). Measure RTT; target &lt; 50–80&nbsp;ms inter‑region.</li>
+            <li><strong>Quorum (KRaft)</strong>: Use an odd controller quorum (e.g., 5) split across sites (3 primary DC, 2 AWS). Ensure a majority survives either‑side failure.</li>
+            <li><strong>Rack Awareness</strong>: Set <code class="code">broker.rack</code> per broker to map DC/AZ. Enforce replica spread across regions.</li>
+            <li><strong>Listeners & TLS</strong>: Define internal/inter‑broker listeners; enable TLS + mTLS across the interconnect; pin cipher/policy to org standards.</li>
+            <li><strong>Topic Policy</strong>: For critical topics set RF≥3, <code class="code">min.insync.replicas</code> ≥2 spanning regions; choose sync/async per topic.</li>
+            <li><strong>Clients</strong>: Configure <code class="code">client.rack</code> (consumers) and bootstrap to local endpoints. Use follower fetching by region.</li>
+            <li><strong>Traffic steering</strong>: DNS/LB split‑horizon so producers/consumers prefer local brokers; avoid unnecessary cross‑site hops.</li>
+          </ol>
+
+          <h3>Implementation Hints</h3>
+          <pre><code># Label K8s nodes with AZ/zone (example)
+kubectl label nodes ip-10-0-1-10 topology.kubernetes.io/zone=onprem-a
+kubectl label nodes ip-10-0-2-11 topology.kubernetes.io/zone=aws-us-east-1a
+
+# Example broker properties (conceptual)
+broker.id=1
+broker.rack=onprem-a
+listeners=PLAINTEXT://:9092,SSL://:9093,CONTROLLER://:9094
+inter.broker.listener.name=SSL
+ssl.keystore.location=/var/ssl/kafka.keystore.jks
+ssl.truststore.location=/var/ssl/kafka.truststore.jks
+
+# Topic defaults for critical streams
+min.insync.replicas=2
+unclean.leader.election.enable=false</code></pre>
+
+          <div class="qa">
+            <details>
+              <summary>Q1. How do you place replicas across on‑prem and AWS?</summary>
+              <div class="a">Set <code>broker.rack</code> to reflect region/AZ and use rack‑aware assignment so each partition places replicas across distinct racks (on‑prem vs AWS). Validate with <em>describeTopics</em> or Control Center.</div>
+            </details>
+            <details>
+              <summary>Q2. With 50–80&nbsp;ms latency, what changes?</summary>
+              <div class="a">Expect higher producer latency for sync topics. Use async (observers) for high‑throughput streams, enable linger/batching, and increase replica fetch parallelism and buffers to keep cross‑site replication healthy.</div>
+            </details>
+            <details>
+              <summary>Q3. Controller quorum placement in KRaft?</summary>
+              <div class="a">Use an odd number (3/5/7). Distribute so any single‑site loss leaves a majority. Example: 5 controllers → 3 on‑prem, 2 in AWS.</div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Section 3 -->
+        <div id="sec3" class="card">
+          <h2>Section 3 — Disaster Recovery (DR) Scenarios</h2>
+          <h3>Tutorial — Runbook Sketches</h3>
+          <h3>A) Region Failover (on‑prem → AWS)</h3>
+          <ol>
+            <li>Detect: ISR shrinks, replication stalls, broker/controller health red.</li>
+            <li>Promote leadership in AWS (for sync topics, replicas are current; for async, accept RPO &gt; 0 at last high watermark in AWS).</li>
+            <li>Flip DNS/LB for producers/consumers to AWS endpoints; verify acls/secrets.</li>
+            <li>Watch lag/ISR expand; validate end‑to‑end flow; announce failover complete.</li>
+          </ol>
+
+          <h3>B) Failback (AWS → on‑prem)</h3>
+          <ol>
+            <li>Restore on‑prem; verify brokers healthy and in ISR.</li>
+            <li>Drain writes or enter maintenance window; select a cutover point.</li>
+            <li>Re‑elect leaders back to on‑prem gradually per topic/partition.</li>
+            <li>Flip DNS/LB back; monitor lag and client stability; exit window.</li>
+          </ol>
+
+          <div class="qa">
+            <details>
+              <summary>Q1. How do you ensure no data loss on failover?</summary>
+              <div class="a">Use <strong>synchronous</strong> topics for critical data (remote replicas in ISR). Set <code>unclean.leader.election.enable=false</code> to avoid promoting out‑of‑date replicas. Confirm ISR membership before leader switch.</div>
+            </details>
+            <details>
+              <summary>Q2. How do you avoid split‑brain?</summary>
+              <div class="a">Design the KRaft controller quorum so only one side can gain majority. If a partition occurs, the minority side cannot elect leaders. Operationally, gate client traffic with DNS/LB so only the active side receives writes.</div>
+            </details>
+            <details>
+              <summary>Q3. How do you test DR safely?</summary>
+              <div class="a">Shadow topics and synthetic load; chaos test network links; rehearse leadership moves off‑peak with read‑only consumers observing continuity and data parity checks.</div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Section 4 -->
+        <div id="sec4" class="card">
+          <h2>Section 4 — Operations & Monitoring</h2>
+          <h3>Golden Signals & Dashboards</h3>
+          <ul>
+            <li><strong>Replication health</strong>: under‑replicated partitions, ISR shrink/expand, replica fetch latency.</li>
+            <li><strong>Client path</strong>: verify follower‑fetch hit rate (consumers reading locally), group lag.</li>
+            <li><strong>Interconnect</strong>: link throughput, errors, retransmits, egress spend.</li>
+            <li><strong>Controller health</strong>: KRaft quorum status, leader election rates.</li>
+          </ul>
+
+          <pre><code># Example Splunk search ideas
+index=kafka sourcetype=broker metrics under_replicated_partitions&gt;0
+index=kafka sourcetype=controller metrics kraft_quorum_status!=healthy
+index=net sourcetype=dx metrics link_utilization&gt;80%</code></pre>
+
+          <div class="qa">
+            <details>
+              <summary>Q1. Which metrics prove AWS is caught up?</summary>
+              <div class="a">Zero under‑replicated partitions; stable ISR with remote replicas present; low max replica lag; consumer lag steady or falling on AWS side.</div>
+            </details>
+            <details>
+              <summary>Q2. How do you automate failover?</summary>
+              <div class="a">Guardrails + buttons: health checks → trigger leader reassign; infra as code for DNS/LB flips; change reviews for production invocation; post‑checks validate ISR/lag before declaring success.</div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Section 5 -->
+        <div id="sec5" class="card">
+          <h2>Section 5 — Common Challenges & Mitigations</h2>
+          <ul>
+            <li><strong>Latency</strong>: prefer async observers for hot paths; batch/linger producers; deploy consumer services near data.</li>
+            <li><strong>Bandwidth & Cost</strong>: follower fetching to reduce egress; compress data; rate‑limit replication during peak business windows.</li>
+            <li><strong>Security</strong>: mTLS cross‑site; rotate certs via Vault; restrict inter‑site ACLs.</li>
+            <li><strong>Compatibility</strong>: align Confluent/Kafka versions; standardize JVM flags and OS tuning across sites.</li>
+          </ul>
+
+          <div class="qa">
+            <details>
+              <summary>Q1. Network architecture recommendation?</summary>
+              <div class="a">Dedicated private connectivity (Direct Connect) with redundant links; segregated broker/consumer subnets; regional LBs; split‑horizon DNS; QoS for replication flows.</div>
+            </details>
+            <details>
+              <summary>Q2. Preventing data loss during leadership churn?</summary>
+              <div class="a">Keep <code>unclean.leader.election.enable=false</code>, ensure remote replicas are in ISR for sync topics, and rehearse controlled elections.</div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Section 6 -->
+        <div id="sec6" class="card">
+          <h2>Section 6 — Config & Tuning Cheat‑Sheet</h2>
+          <ul>
+            <li><code>broker.rack</code> — map to DC/AZ for rack‑aware placement.</li>
+            <li><code>client.rack</code> — make consumers prefer local replicas (follower fetch).</li>
+            <li><code>unclean.leader.election.enable=false</code> — avoid data loss on failover.</li>
+            <li><code>num.replica.fetchers</code> — increase cross‑region fetch parallelism.</li>
+            <li><code>replica.fetch.max.bytes</code>, <code>replica.fetch.wait.max.ms</code> — tune replication throughput/latency.</li>
+            <li><code>min.insync.replicas</code> — set per topic based on RPO requirements.</li>
+          </ul>
+          <pre><code># Consumer example (Java)
+props.put("client.rack", "aws-use1a");
+props.put("fetch.min.bytes", 1048576);
+props.put("fetch.max.wait.ms", 100);
+
+# Producer example
+props.put("acks", "all");
+props.put("linger.ms", 10);
+props.put("compression.type", "lz4");</code></pre>
+        </div>
+
+        <!-- Section 7 -->
+        <div id="sec7" class="card">
+          <h2>Section 7 — Practice Drills & Checklists</h2>
+          <h3>30‑Minute Whiteboard Drill</h3>
+          <ul>
+            <li>Draw on‑prem + AWS, controller quorum, broker racks, client paths.</li>
+            <li>Mark sync vs async topics and expected RPO/RTO.</li>
+            <li>Show failover steps and traffic cutover.</li>
+          </ul>
+          <h3>GameDay (2 hours)</h3>
+          <ul>
+            <li>Throttle interconnect → watch replica lag → tune fetchers/buffers.</li>
+            <li>Kill a controller → verify quorum & leadership stability.</li>
+            <li>Flip leaders to AWS → validate no unclean election, then failback.</li>
+          </ul>
+        </div>
+
+        <div id="refs" class="card">
+          <h2>References (quick links)</h2>
+          <ul>
+            <li><a href="https://docs.confluent.io/platform/current/multi-dc-deployments/multi-region.html" target="_blank">Confluent — Multi‑Region Clusters (overview)</a></li>
+            <li><a href="https://docs.confluent.io/platform/current/multi-dc-deployments/multi-region-tutorial.html" target="_blank">Confluent — MRC Tutorial</a></li>
+            <li><a href="https://www.confluent.io/blog/automatic-observer-promotion-for-safe-multi-datacenter-failover-in-confluent-6-1/" target="_blank">Confluent — Observer Replicas & AOP</a></li>
+            <li><a href="https://docs.confluent.io/operator/current/co-configure-rack-awareness.html" target="_blank">CFK — Rack Awareness</a></li>
+            <li><a href="https://docs.confluent.io/platform/current/kafka-metadata/kraft.html" target="_blank">Confluent — KRaft Controller Quorum</a></li>
+            <li><a href="https://docs.confluent.io/control-center/current/overview.html" target="_blank">Confluent Control Center — Monitoring</a></li>
+            <li><a href="https://aws.amazon.com/directconnect/" target="_blank">AWS Direct Connect — Overview</a></li>
+            <li><a href="https://docs.confluent.io/platform/current/installation/configuration/topic-configs.html#unclean-leader-election-enable" target="_blank">Confluent — unclean.leader.election.enable</a></li>
+            <li><a href="https://aiven.io/docs/products/kafka/howto/enable-follower-fetching" target="_blank">Enable follower fetching (client.rack)</a></li>
+          </ul>
+          <p class="footer">Links open in a new tab.</p>
+        </div>
+
+        <p class="footer">© Tutorial generated for interview prep — MRC only (no MM2). Keep configs conceptual; adapt to your platform policy and versions.</p>
+      </div>
+    </body></html>'></iframe>
+
+    <p class="hint">Tip: To change height, set the <span class="kbd">min-height</span> on the iframe above. You can also copy this whole file and host it.</p>
+  </div>
+
+  <script>
+    // Optional: auto-resize the iframe to fit content height when allowed by browser
+    (function(){
+      const f = document.getElementById('mrcFrame');
+      function ping(){
+        try{ const h = f.contentWindow.document.body.scrollHeight; if(h) f.style.minHeight = (h+40)+"px"; }catch(e){}
+      }
+      window.addEventListener('load', ping);
+      setInterval(ping, 1200);
+    })();
+  </script>
+</body>
+</html>
